@@ -36,3 +36,5 @@ dependencies {
     compile 'com.android.support:mediarouter-v7:19.0.1'
     compile 'com.google.android.gms:play-services:4.3.+'
 }
+
+apply from: "$GRADLE_SCRIPTS/gradle-mvn-push.gradle"
