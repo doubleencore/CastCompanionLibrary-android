@@ -220,7 +220,7 @@ public class VideoCastManager extends BaseCastManager
         return sInstance;
     }
 
-    private VideoCastManager(Context context, String applicationId, Class<?> targetActivity,
+    protected VideoCastManager(Context context, String applicationId, Class<?> targetActivity,
             String dataNamespace) {
         super(context, applicationId);
         LOGD(TAG, "VideoCastManager is instantiated");
@@ -1688,7 +1688,7 @@ public class VideoCastManager extends BaseCastManager
      * JB, the image shown on the lock screen is a small size bitmap but for KitKat, the image is a
      * full-screen image so we need to separately handle these two cases.
      */
-    private Bitmap getBitmapForLockScreen(MediaInfo video) {
+    protected Bitmap getBitmapForLockScreen(MediaInfo video) {
         if (null == video) {
             return null;
         }
@@ -1945,7 +1945,7 @@ public class VideoCastManager extends BaseCastManager
     }
 
     @Override
-    MediaRouteDialogFactory getMediaRouteDialogFactory() {
+    protected MediaRouteDialogFactory getMediaRouteDialogFactory() {
         return new VideoMediaRouteDialogFactory();
     }
 
