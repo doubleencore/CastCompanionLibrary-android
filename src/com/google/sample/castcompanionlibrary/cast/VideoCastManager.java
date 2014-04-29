@@ -1688,7 +1688,7 @@ public class VideoCastManager extends BaseCastManager
      * JB, the image shown on the lock screen is a small size bitmap but for KitKat, the image is a
      * full-screen image so we need to separately handle these two cases.
      */
-    private Bitmap getBitmapForLockScreen(MediaInfo video) {
+    protected Bitmap getBitmapForLockScreen(MediaInfo video) {
         if (null == video) {
             return null;
         }
