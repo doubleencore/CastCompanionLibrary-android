@@ -220,7 +220,7 @@ public class VideoCastManager extends BaseCastManager
         return sInstance;
     }
 
-    private VideoCastManager(Context context, String applicationId, Class<?> targetActivity,
+    protected VideoCastManager(Context context, String applicationId, Class<?> targetActivity,
             String dataNamespace) {
         super(context, applicationId);
         LOGD(TAG, "VideoCastManager is instantiated");
