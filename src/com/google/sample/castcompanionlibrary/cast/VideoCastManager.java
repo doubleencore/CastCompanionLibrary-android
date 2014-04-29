@@ -1945,7 +1945,7 @@ public class VideoCastManager extends BaseCastManager
     }
 
     @Override
-    MediaRouteDialogFactory getMediaRouteDialogFactory() {
+    protected MediaRouteDialogFactory getMediaRouteDialogFactory() {
         return new VideoMediaRouteDialogFactory();
     }
 
