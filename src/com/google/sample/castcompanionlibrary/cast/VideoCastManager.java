@@ -236,7 +236,7 @@ public class VideoCastManager extends BaseCastManager
         mMiniControllers = Collections.synchronizedSet(new HashSet<IMiniController>());
 
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-        mMediaButtonReceiverComponent = new ComponentName(context, VideoIntentReceiver.class);
+        mMediaButtonReceiverComponent = getMediaButtonReceiverComponentName();
     }
 
     /*============================================================================================*/
@@ -1626,8 +1626,7 @@ public class VideoCastManager extends BaseCastManager
         mAudioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC,
                 AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK);
 
-        ComponentName eventReceiver = new ComponentName(
-                mContext, VideoIntentReceiver.class.getName());
+        ComponentName eventReceiver = getMediaButtonReceiverComponentName();
         mAudioManager.registerMediaButtonEventReceiver(eventReceiver);
 
         if (mRemoteControlClientCompat == null) {
@@ -1805,6 +1804,10 @@ public class VideoCastManager extends BaseCastManager
                 mRemoteControlClientCompat = null;
             }
         }
+    }
+
+    protected ComponentName getMediaButtonReceiverComponentName() {
+        return new ComponentName(mContext, VideoIntentReceiver.class);
     }
 
     /*============================================================================================*/
