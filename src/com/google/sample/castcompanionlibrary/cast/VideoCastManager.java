@@ -1763,7 +1763,9 @@ public class VideoCastManager extends BaseCastManager
                 setUpRemoteControl(getRemoteMediaInformation());
             }
             if (mRemoteControlClientCompat != null) {
-                int playState = isRemoteStreamLive() ? RemoteControlClient.PLAYSTATE_BUFFERING
+                // setting the play state to buffering causes the stop icon to be shown on the remote control client.
+                // only set play state to buffering if we don't allow pausing live streams.
+                int playState = (stopsLiveStreams() && isRemoteStreamLive()) ? RemoteControlClient.PLAYSTATE_BUFFERING
                         : RemoteControlClient.PLAYSTATE_PLAYING;
                 mRemoteControlClientCompat
                         .setPlaybackState(playing ? playState
@@ -1827,6 +1829,15 @@ public class VideoCastManager extends BaseCastManager
 
     protected ComponentName getMediaButtonReceiverComponentName() {
         return new ComponentName(mContext, VideoIntentReceiver.class);
+    }
+
+    /**
+     * Used to determine whether live streams should be stopped or paused when playback is toggled.
+     *
+     * @return true if live streams should be stopped.
+     */
+    public boolean stopsLiveStreams() {
+        return true;
     }
 
     /*============================================================================================*/
