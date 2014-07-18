@@ -140,14 +140,22 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
 
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
-            onVolumeChange((double) mVolumeIncrement);
-        } else if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-            onVolumeChange(-(double) mVolumeIncrement);
-        } else {
-            return super.onKeyDown(keyCode, event);
+        if (mCastManager.isConnected()) {
+            if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
+                onVolumeChange((double) mVolumeIncrement);
+            } else if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
+                onVolumeChange(-(double) mVolumeIncrement);
+            } else {
+                // we don't want to consume non-volume key events
+                return super.onKeyDown(keyCode, event);
+            }
+            if (mCastManager.getPlaybackStatus() == MediaStatus.PLAYER_STATE_PLAYING) {
+                return super.onKeyDown(keyCode, event);
+            } else {
+                return true;
+            }
         }
-        return true;
+        return super.onKeyDown(keyCode, event);
     }
 
     private void onVolumeChange(double volumeIncrement) {
@@ -280,6 +288,7 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
 
     @Override
     public void setPlaybackStatus(int state) {
+        LOGD(TAG, "setPlaybackStatus(): state = " + state);
         switch (state) {
             case MediaStatus.PLAYER_STATE_PLAYING:
                 mLoading.setVisibility(View.INVISIBLE);
@@ -332,7 +341,11 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
     @Override
     public void setImage(Bitmap bitmap) {
         if (null != bitmap) {
-            mPageView.setBackgroundDrawable(new BitmapDrawable(getResources(), bitmap));
+            if (mPageView instanceof ImageView) {
+                ((ImageView) mPageView).setImageBitmap(bitmap);
+            } else {
+                mPageView.setBackgroundDrawable(new BitmapDrawable(getResources(), bitmap));
+            }
         }
     }
 
