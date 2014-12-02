@@ -260,7 +260,7 @@ public class VideoCastManager extends BaseCastManager
         mMiniControllers = Collections.synchronizedSet(new HashSet<IMiniController>());
 
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-        mMediaButtonReceiverComponent = new ComponentName(context, VideoIntentReceiver.class);
+        mMediaButtonReceiverComponent = getMediaButtonReceiverComponentName();
     }
 
     /*============================================================================================*/
@@ -1689,8 +1689,7 @@ public class VideoCastManager extends BaseCastManager
         mAudioManager.requestAudioFocus(null, AudioManager.STREAM_MUSIC,
                 AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK);
 
-        ComponentName eventReceiver = new ComponentName(
-                mContext, VideoIntentReceiver.class.getName());
+        ComponentName eventReceiver = getMediaButtonReceiverComponentName();
         mAudioManager.registerMediaButtonEventReceiver(eventReceiver);
 
         if (mRemoteControlClientCompat == null) {
@@ -1794,7 +1793,9 @@ public class VideoCastManager extends BaseCastManager
                 setUpRemoteControl(getRemoteMediaInformation());
             }
             if (mRemoteControlClientCompat != null) {
-                int playState = isRemoteStreamLive() ? RemoteControlClient.PLAYSTATE_BUFFERING
+                // setting the play state to buffering causes the stop icon to be shown on the remote control client.
+                // only set play state to buffering if we don't allow pausing live streams.
+                int playState = (stopsLiveStreams() && isRemoteStreamLive()) ? RemoteControlClient.PLAYSTATE_BUFFERING
                         : RemoteControlClient.PLAYSTATE_PLAYING;
                 mRemoteControlClientCompat
                         .setPlaybackState(playing ? playState
@@ -1855,6 +1856,19 @@ public class VideoCastManager extends BaseCastManager
                 mRemoteControlClientCompat = null;
             }
         }
+    }
+
+    protected ComponentName getMediaButtonReceiverComponentName() {
+        return new ComponentName(mContext, VideoIntentReceiver.class);
+    }
+
+    /**
+     * Used to determine whether live streams should be stopped or paused when playback is toggled.
+     *
+     * @return true if live streams should be stopped.
+     */
+    public boolean stopsLiveStreams() {
+        return true;
     }
 
     /*============================================================================================*/
