@@ -127,14 +127,17 @@ public class MiniController extends RelativeLayout implements IMiniController {
             @Override
             public void onClick(View v) {
                 if (null != mListener) {
-                    setLoadingVisibility(true);
                     try {
+                        adjustControlsVisibility(false);
                         mListener.onPlayPauseClicked(v);
                     } catch (CastException e) {
+                        adjustControlsVisibility(true);
                         mListener.onFailed(R.string.failed_perform_action, -1);
                     } catch (TransientNetworkDisconnectionException e) {
+                        adjustControlsVisibility(true);
                         mListener.onFailed(R.string.failed_no_connection_trans, -1);
                     } catch (NoConnectionException e) {
+                        adjustControlsVisibility(true);
                         mListener.onFailed(R.string.failed_no_connection, -1);
                     }
                 }
@@ -224,14 +227,12 @@ public class MiniController extends RelativeLayout implements IMiniController {
     public void setPlaybackStatus(int state, int idleReason) {
         switch (state) {
             case MediaStatus.PLAYER_STATE_PLAYING:
-                mPlayPause.setVisibility(View.VISIBLE);
                 mPlayPause.setImageDrawable(getPauseStopButton());
-                setLoadingVisibility(false);
+                adjustControlsVisibility(true);
                 break;
             case MediaStatus.PLAYER_STATE_PAUSED:
-                mPlayPause.setVisibility(View.VISIBLE);
                 mPlayPause.setImageDrawable(mPlayDrawable);
-                setLoadingVisibility(false);
+                adjustControlsVisibility(true);
                 break;
             case MediaStatus.PLAYER_STATE_IDLE:
                 switch (mStreamType) {
@@ -241,9 +242,8 @@ public class MiniController extends RelativeLayout implements IMiniController {
                         break;
                     case MediaInfo.STREAM_TYPE_LIVE:
                         if (idleReason == MediaStatus.IDLE_REASON_CANCELED) {
-                            mPlayPause.setVisibility(View.VISIBLE);
                             mPlayPause.setImageDrawable(mPlayDrawable);
-                            setLoadingVisibility(false);
+                            adjustControlsVisibility(true);
                         } else {
                             mPlayPause.setVisibility(View.INVISIBLE);
                             setLoadingVisibility(false);
@@ -252,8 +252,7 @@ public class MiniController extends RelativeLayout implements IMiniController {
                 }
                 break;
             case MediaStatus.PLAYER_STATE_BUFFERING:
-                mPlayPause.setVisibility(View.INVISIBLE);
-                setLoadingVisibility(true);
+                adjustControlsVisibility(false);
                 break;
             default:
                 mPlayPause.setVisibility(View.INVISIBLE);
@@ -278,6 +277,12 @@ public class MiniController extends RelativeLayout implements IMiniController {
 
     private void setLoadingVisibility(boolean show) {
         mLoading.setVisibility(show ? View.VISIBLE : View.GONE);
+    }
+
+    private void adjustControlsVisibility(boolean showPlayPause) {
+        int visible = showPlayPause ? View.VISIBLE : View.INVISIBLE;
+        mPlayPause.setVisibility(visible);
+        setLoadingVisibility(!showPlayPause);
     }
 
     private Drawable getPauseStopButton() {
