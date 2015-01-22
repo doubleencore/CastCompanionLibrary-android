@@ -240,8 +240,8 @@ public class VideoCastManager extends BaseCastManager
 
         mMiniControllers = Collections.synchronizedSet(new HashSet<IMiniController>());
 
-        mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-        mMediaButtonReceiverComponent = new ComponentName(context, VideoIntentReceiver.class);
+        mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
+        mMediaButtonReceiverComponent = getMediaButtonReceiverComponentName();
     }
 
     /*============================================================================================*/
