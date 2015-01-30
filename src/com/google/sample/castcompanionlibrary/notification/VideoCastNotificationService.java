@@ -385,10 +385,10 @@ public class VideoCastNotificationService extends Service {
                 .setContentText(castingTo)
                 .setContentIntent(contentPendingIntent)
                 .setLargeIcon(bitmap)
-                .addAction(isPlaying ? R.drawable.ic_pause_white_48dp :
-                                R.drawable.ic_play_arrow_white_48dp,
+                .addAction(isPlaying ? R.drawable.notification_pause :
+                                R.drawable.notification_play,
                         getString(R.string.pause), playbackPendingIntent)
-                .addAction(R.drawable.ic_clear_white_24dp, getString(R.string.disconnect),
+                .addAction(R.drawable.notification_stop, getString(R.string.disconnect),
                         stopPendingIntent)
                 .setStyle(new Notification.MediaStyle()
                                 .setShowActionsInCompactView(new int[]{0,1}))
@@ -414,13 +414,13 @@ public class VideoCastNotificationService extends Service {
 
         if (isPlaying) {
             if (info.getStreamType() == MediaInfo.STREAM_TYPE_LIVE) {
-                rv.setImageViewResource(R.id.playPauseView, R.drawable.ic_av_stop_sm_dark);
+                rv.setImageViewResource(R.id.playPauseView, R.drawable.notification_stop);
             } else {
-                rv.setImageViewResource(R.id.playPauseView, R.drawable.ic_av_pause_sm_dark);
+                rv.setImageViewResource(R.id.playPauseView, R.drawable.notification_pause);
             }
 
         } else {
-            rv.setImageViewResource(R.id.playPauseView, R.drawable.ic_av_play_sm_dark);
+            rv.setImageViewResource(R.id.playPauseView, R.drawable.notification_play);
         }
     }
 
