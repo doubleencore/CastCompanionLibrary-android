@@ -19,13 +19,26 @@ package com.google.sample.castcompanionlibrary.cast.player;
 import static com.google.sample.castcompanionlibrary.utils.LogUtils.LOGD;
 import static com.google.sample.castcompanionlibrary.utils.LogUtils.LOGE;
 
+import com.google.android.gms.cast.MediaInfo;
+import com.google.android.gms.cast.MediaStatus;
+import com.google.sample.castcompanionlibrary.R;
+import com.google.sample.castcompanionlibrary.cast.VideoCastManager;
+import com.google.sample.castcompanionlibrary.cast.exceptions.CastException;
+import com.google.sample.castcompanionlibrary.cast.exceptions.NoConnectionException;
+import com.google.sample.castcompanionlibrary.cast.exceptions.TransientNetworkDisconnectionException;
+import com.google.sample.castcompanionlibrary.cast.tracks.ui.TracksChooserDialog;
+import com.google.sample.castcompanionlibrary.utils.LogUtils;
+import com.google.sample.castcompanionlibrary.utils.Utils;
+
 import android.app.Activity;
 import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentTransaction;
 import android.support.v7.app.ActionBarActivity;
+import android.support.v7.widget.Toolbar;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -37,16 +50,6 @@ import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
 import android.widget.TextView;
 
-import com.google.android.gms.cast.MediaInfo;
-import com.google.android.gms.cast.MediaStatus;
-import com.google.sample.castcompanionlibrary.R;
-import com.google.sample.castcompanionlibrary.cast.VideoCastManager;
-import com.google.sample.castcompanionlibrary.cast.exceptions.CastException;
-import com.google.sample.castcompanionlibrary.cast.exceptions.NoConnectionException;
-import com.google.sample.castcompanionlibrary.cast.exceptions.TransientNetworkDisconnectionException;
-import com.google.sample.castcompanionlibrary.utils.LogUtils;
-import com.google.sample.castcompanionlibrary.utils.Utils;
-
 /**
  * This class provides an {@link Activity} that clients can easily add to their applications to
  * provide an out-of-the-box remote player when a video is casting to a cast device.
@@ -57,7 +60,8 @@ import com.google.sample.castcompanionlibrary.utils.Utils;
  * <p>
  * Clients who need to perform a pre-authorization process for playback can register a
  * {@link IMediaAuthListener} by calling
- * {@link VideoCastManager#startCastControllerActivity(android.content.Context, IMediaAuthService)}.
+ * {@link VideoCastManager#startCastControllerActivity(android.content.Context,
+ * IMediaAuthService)}.
  * In that case, this activity manages starting the {@link IMediaAuthService} and will register a
  * listener to handle the result.
  */
@@ -65,7 +69,6 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
 
     private static final String TAG = LogUtils.makeLogTag(VideoCastControllerActivity.class);
     private VideoCastManager mCastManager;
-    private View mPageView;
     private ImageView mPlayPause;
     private TextView mLiveText;
     private TextView mStart;
@@ -74,15 +77,17 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
     private TextView mLine1;
     private TextView mLine2;
     private ProgressBar mLoading;
+    private ImageView mClosedCaptionIcon;
     private float mVolumeIncrement;
     private View mControllers;
     private Drawable mPauseDrawable;
     private Drawable mPlayDrawable;
     private Drawable mStopDrawable;
-    private VideoCastControllerFragment mediaAuthFragment;
+    private VideoCastControllerFragment mVideoCastControllerFragment;
     private OnVideoCastControllerListener mListener;
     private int mStreamType;
     public static final float DEFAULT_VOLUME_INCREMENT = 0.05f;
+    private ImageView mBackgroundImage;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -95,9 +100,10 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
             mVolumeIncrement = DEFAULT_VOLUME_INCREMENT;
         }
         try {
-            mCastManager = VideoCastManager.getInstance(this);
+            mCastManager = VideoCastManager.getInstance();
         } catch (CastException e) {
             // logged already
+            finish();
         }
 
         setupActionBar();
@@ -108,16 +114,16 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
         }
 
         FragmentManager fm = getSupportFragmentManager();
-        mediaAuthFragment = (VideoCastControllerFragment) fm.findFragmentByTag("task");
+        mVideoCastControllerFragment = (VideoCastControllerFragment) fm.findFragmentByTag("task");
 
         // if fragment is null, it means this is the first time, so create it
-        if (mediaAuthFragment == null) {
-            mediaAuthFragment = VideoCastControllerFragment.newInstance(extras);
-            fm.beginTransaction().add(mediaAuthFragment, "task").commit();
-            mListener = mediaAuthFragment;
+        if (mVideoCastControllerFragment == null) {
+            mVideoCastControllerFragment = VideoCastControllerFragment.newInstance(extras);
+            fm.beginTransaction().add(mVideoCastControllerFragment, "task").commit();
+            mListener = mVideoCastControllerFragment;
             setOnVideoCastControllerChangedListener(mListener);
         } else {
-            mListener = mediaAuthFragment;
+            mListener = mVideoCastControllerFragment;
             mListener.onConfigurationChanged();
         }
     }
@@ -139,43 +145,18 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
     }
 
     @Override
-    public boolean onKeyDown(int keyCode, KeyEvent event) {
-        if (mCastManager.isConnected()) {
-            if (keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
-                onVolumeChange((double) mVolumeIncrement);
-            } else if (keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
-                onVolumeChange(-(double) mVolumeIncrement);
-            } else {
-                // we don't want to consume non-volume key events
-                return super.onKeyDown(keyCode, event);
-            }
-            if (mCastManager.getPlaybackStatus() == MediaStatus.PLAYER_STATE_PLAYING) {
-                return super.onKeyDown(keyCode, event);
-            } else {
-                return true;
-            }
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (mCastManager.onDispatchVolumeKeyEvent(event, mVolumeIncrement)) {
+            return true;
         }
-        return super.onKeyDown(keyCode, event);
-    }
-
-    private void onVolumeChange(double volumeIncrement) {
-        if (mCastManager == null) {
-            return;
-        }
-        try {
-            mCastManager.incrementVolume(volumeIncrement);
-        } catch (Exception e) {
-            LOGE(TAG, "onVolumeChange() Failed to change volume", e);
-            Utils.showErrorDialog(VideoCastControllerActivity.this,
-                    R.string.failed_setting_volume);
-        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override
     protected void onResume() {
         LOGD(TAG, "onResume() was called");
         try {
-            mCastManager = VideoCastManager.getInstance(VideoCastControllerActivity.this);
+            mCastManager = VideoCastManager.getInstance();
         } catch (CastException e) {
             // logged already
         }
@@ -184,10 +165,10 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
     }
 
     private void loadAndSetupViews() {
+        mBackgroundImage = (ImageView) findViewById(R.id.background_image);
         mPauseDrawable = getResources().getDrawable(R.drawable.ic_av_pause_dark);
         mPlayDrawable = getResources().getDrawable(R.drawable.ic_av_play_dark);
         mStopDrawable = getResources().getDrawable(R.drawable.ic_av_stop_dark);
-        mPageView = findViewById(R.id.pageView);
         mPlayPause = (ImageView) findViewById(R.id.imageView1);
         mLiveText = (TextView) findViewById(R.id.liveText);
         mStart = (TextView) findViewById(R.id.startText);
@@ -197,7 +178,8 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
         mLine2 = (TextView) findViewById(R.id.textView2);
         mLoading = (ProgressBar) findViewById(R.id.progressBar1);
         mControllers = findViewById(R.id.controllers);
-
+        mClosedCaptionIcon = (ImageView) findViewById(R.id.cc);
+        updateClosedCaption(CC_DISABLED);
         mPlayPause.setOnClickListener(new OnClickListener() {
 
             @Override
@@ -206,15 +188,15 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
                     mListener.onPlayPauseClicked(v);
                 } catch (TransientNetworkDisconnectionException e) {
                     LOGE(TAG, "Failed to toggle playback due to temporary network issue", e);
-                    Utils.showErrorDialog(VideoCastControllerActivity.this,
+                    Utils.showToast(VideoCastControllerActivity.this,
                             R.string.failed_no_connection_trans);
                 } catch (NoConnectionException e) {
                     LOGE(TAG, "Failed to toggle playback due to network issues", e);
-                    Utils.showErrorDialog(VideoCastControllerActivity.this,
+                    Utils.showToast(VideoCastControllerActivity.this,
                             R.string.failed_no_connection);
                 } catch (Exception e) {
                     LOGE(TAG, "Failed to toggle playback due to other issues", e);
-                    Utils.showErrorDialog(VideoCastControllerActivity.this,
+                    Utils.showToast(VideoCastControllerActivity.this,
                             R.string.failed_perform_action);
                 }
             }
@@ -255,20 +237,45 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
                         mListener.onProgressChanged(seekBar, progress, fromUser);
                     }
                 } catch (Exception e) {
-                    LOGE(TAG, "Failed to set teh progress result", e);
+                    LOGE(TAG, "Failed to set the progress result", e);
+                }
+            }
+        });
+
+        mClosedCaptionIcon.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                try {
+                    showTracksChooserDialog();
+                } catch (TransientNetworkDisconnectionException e) {
+                    LOGE(TAG, "Failed to get the media", e);
+                } catch (NoConnectionException e) {
+                    LOGE(TAG, "Failed to get the media", e);
                 }
             }
         });
     }
 
+    private void showTracksChooserDialog()
+            throws TransientNetworkDisconnectionException, NoConnectionException {
+        FragmentTransaction transaction = getSupportFragmentManager().beginTransaction();
+        Fragment prev = getSupportFragmentManager().findFragmentByTag("dialog");
+        if (prev != null) {
+            transaction.remove(prev);
+        }
+        transaction.addToBackStack(null);
+
+        // Create and show the dialog.
+        TracksChooserDialog dialogFragment = TracksChooserDialog
+                .newInstance(mCastManager.getRemoteMediaInformation());
+        dialogFragment.show(transaction, "dialog");
+    }
+
     private void setupActionBar() {
+        Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
+        toolbar.setTitle("");
+        setSupportActionBar(toolbar);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
-        getSupportActionBar().setDisplayUseLogoEnabled(false);
-        getSupportActionBar().setDisplayShowHomeEnabled(false);
-        getSupportActionBar().setDisplayShowTitleEnabled(true);
-        getSupportActionBar().setTitle(" "); // without a title, the "<" won't show
-        getSupportActionBar().setBackgroundDrawable(
-                getResources().getDrawable(R.drawable.actionbar_bg_gradient_light));
     }
 
     @Override
@@ -284,6 +291,23 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
         mStart.setVisibility(visibility);
         mEnd.setVisibility(visibility);
         mSeekbar.setVisibility(visibility);
+    }
+
+    @Override
+    public void updateClosedCaption(int status) {
+        switch (status) {
+            case CC_ENABLED:
+                mClosedCaptionIcon.setVisibility(View.VISIBLE);
+                mClosedCaptionIcon.setEnabled(true);
+                break;
+            case CC_DISABLED:
+                mClosedCaptionIcon.setVisibility(View.VISIBLE);
+                mClosedCaptionIcon.setEnabled(false);
+                break;
+            case CC_HIDDEN:
+                mClosedCaptionIcon.setVisibility(View.GONE);
+                break;
+        }
     }
 
     @Override
@@ -341,22 +365,24 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
     @Override
     public void setImage(Bitmap bitmap) {
         if (null != bitmap) {
-            if (mPageView instanceof ImageView) {
-                ((ImageView) mPageView).setImageBitmap(bitmap);
-            } else {
-                mPageView.setBackgroundDrawable(new BitmapDrawable(getResources(), bitmap));
-            }
+            mBackgroundImage.setImageBitmap(bitmap);
         }
     }
 
     @Override
     public void setLine1(String text) {
+        if (null == text) {
+            text = "";
+        }
         mLine1.setText(text);
 
     }
 
     @Override
     public void setLine2(String text) {
+        if (null == text) {
+            text = "";
+        }
         mLine2.setText(text);
 
     }
@@ -385,5 +411,4 @@ public class VideoCastControllerActivity extends ActionBarActivity implements IV
     public void closeActivity() {
         finish();
     }
-
 }

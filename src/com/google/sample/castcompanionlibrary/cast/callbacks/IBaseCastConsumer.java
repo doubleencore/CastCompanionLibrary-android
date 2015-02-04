@@ -16,6 +16,7 @@
 
 package com.google.sample.castcompanionlibrary.cast.callbacks;
 
+import com.google.android.gms.cast.CastDevice;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.sample.castcompanionlibrary.cast.exceptions.OnFailedListener;
 
@@ -76,4 +77,21 @@ public interface IBaseCastConsumer extends OnFailedListener {
      * network issues.
      */
     public void onConnectivityRecovered();
+
+    /**
+     * Called when visibility of the application has changed.
+     */
+    public void onUiVisibilityChanged(boolean visible);
+
+    /**
+     * Called when the status of reconnection changes.
+     * @param status
+     */
+    public void onReconnectionStatusChanged(int status);
+
+    /**
+     * Called when a device is selected/unselected.
+     * @param device
+     */
+    public void onDeviceSelected(CastDevice device);
 }

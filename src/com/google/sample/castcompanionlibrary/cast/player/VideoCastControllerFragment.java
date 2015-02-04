@@ -19,39 +19,43 @@ package com.google.sample.castcompanionlibrary.cast.player;
 import static com.google.sample.castcompanionlibrary.utils.LogUtils.LOGD;
 import static com.google.sample.castcompanionlibrary.utils.LogUtils.LOGE;
 
-import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.content.DialogInterface;
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.os.AsyncTask;
-import android.os.Bundle;
-import android.os.Handler;
-import android.support.v4.app.DialogFragment;
-import android.support.v4.app.Fragment;
-import android.text.TextUtils;
-import android.view.View;
-import android.widget.SeekBar;
-
 import com.google.android.gms.cast.MediaInfo;
 import com.google.android.gms.cast.MediaMetadata;
 import com.google.android.gms.cast.MediaStatus;
+import com.google.android.gms.cast.MediaTrack;
+import com.google.android.gms.cast.RemoteMediaPlayer;
 import com.google.sample.castcompanionlibrary.R;
 import com.google.sample.castcompanionlibrary.cast.VideoCastManager;
 import com.google.sample.castcompanionlibrary.cast.callbacks.VideoCastConsumerImpl;
 import com.google.sample.castcompanionlibrary.cast.exceptions.CastException;
 import com.google.sample.castcompanionlibrary.cast.exceptions.NoConnectionException;
 import com.google.sample.castcompanionlibrary.cast.exceptions.TransientNetworkDisconnectionException;
+import com.google.sample.castcompanionlibrary.utils.FetchBitmapTask;
 import com.google.sample.castcompanionlibrary.utils.LogUtils;
 import com.google.sample.castcompanionlibrary.utils.Utils;
 
-import org.json.JSONException;
-import org.json.JSONObject;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.Dialog;
+import android.content.DialogInterface;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.support.annotation.Nullable;
+import android.support.v4.app.DialogFragment;
+import android.support.v4.app.Fragment;
+import android.text.TextUtils;
+import android.view.View;
+import android.widget.SeekBar;
 
-import java.net.URL;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * A fragment that provides a mechanism to retain the state and other needed objects for
@@ -77,7 +81,7 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
     private Handler mHandler;
     protected boolean mAuthSuccess = true;
     private IVideoCastController mCastController;
-    private AsyncTask<String, Void, Bitmap> mImageAsyncTask;
+    private FetchBitmapTask mImageAsyncTask;
     private Timer mSeekbarTimer;
     private int mPlaybackState;
     private MyCastConsumer mCastConsumer;
@@ -97,15 +101,15 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
         mCastController = (IVideoCastController) activity;
         mHandler = new Handler();
         try {
-            mCastManager = VideoCastManager.getInstance(activity);
+            mCastManager = VideoCastManager.getInstance();
         } catch (CastException e) {
             // logged already
         }
     }
 
     @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+        super.onActivityCreated(savedInstanceState);
         mCastConsumer = new MyCastConsumer();
         Bundle bundle = getArguments();
         if (null == bundle) {
@@ -116,12 +120,19 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
 
         // Retain this fragment across configuration changes.
         setRetainInstance(true);
-
+        mCastManager.addTracksSelectedListener(this);
+        boolean explicitStartActivity = Utils.getBooleanFromPreference(getActivity(),
+                VideoCastManager.PREFS_KEY_START_ACTIVITY, false);
+        if (explicitStartActivity) {
+            mIsFresh = true;
+        }
+        Utils.saveBooleanToPreference(getActivity(), VideoCastManager.PREFS_KEY_START_ACTIVITY,
+                false);
         if (extras.getBoolean(VideoCastManager.EXTRA_HAS_AUTH)) {
             mOverallState = OverallState.AUTHORIZING;
             mMediaAuthService = mCastManager.getMediaAuthService();
             handleMediaAuthTask(mMediaAuthService);
-            showImage(Utils.getImageUrl(mMediaAuthService.getMediaInfo(), 1));
+            showImage(Utils.getImageUri(mMediaAuthService.getMediaInfo(), 1));
         } else if (null != mediaWrapper) {
             mOverallState = OverallState.PLAYBACK;
             boolean shouldStartPlayback = extras.getBoolean(VideoCastManager.EXTRA_SHOULD_START);
@@ -137,7 +148,7 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
             }
             MediaInfo info = Utils.toMediaInfo(mediaWrapper);
             int startPoint = extras.getInt(VideoCastManager.EXTRA_START_POINT, 0);
-            onReady(info, shouldStartPlayback, startPoint, customData);
+            onReady(info, shouldStartPlayback && explicitStartActivity, startPoint, customData);
         }
     }
 
@@ -222,11 +233,22 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
         public void onRemoteMediaPlayerMetadataUpdated() {
             try {
                 mSelectedMedia = mCastManager.getRemoteMediaInformation();
+                updateClosedCaptionState();
                 updateMetadata();
             } catch (TransientNetworkDisconnectionException e) {
                 LOGE(TAG, "Failed to update the metadata due to network issues", e);
             } catch (NoConnectionException e) {
                 LOGE(TAG, "Failed to update the metadata due to network issues", e);
+            }
+        }
+
+        @Override
+        public void onFailed(int resourceId, int statusCode) {
+            LOGD(TAG, "onFailed(): " + getString(resourceId) + ", status code: " + statusCode);
+            if (statusCode == RemoteMediaPlayer.STATUS_FAILED
+                    || statusCode == RemoteMediaPlayer.STATUS_TIMED_OUT) {
+                Utils.showToast(getActivity(), resourceId);
+                mCastController.closeActivity();
             }
         }
 
@@ -286,6 +308,7 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
     private void onReady(MediaInfo mediaInfo, boolean shouldStartPlayback, int startPoint,
             JSONObject customData) {
         mSelectedMedia = mediaInfo;
+        updateClosedCaptionState();
         try {
             mCastController.setStreamType(mSelectedMedia.getStreamType());
             if (shouldStartPlayback) {
@@ -310,6 +333,18 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
         restartTrickplayTimer();
     }
 
+    private void updateClosedCaptionState() {
+        int state = IVideoCastController.CC_HIDDEN;
+        if (mCastManager.isFeatureEnabled(VideoCastManager.FEATURE_CAPTIONS_PREFERENCE)
+                && mSelectedMedia != null
+                && mCastManager.getTracksPreferenceManager().isCaptionEnabled()) {
+            List<MediaTrack> tracks = mSelectedMedia.getMediaTracks();
+            state = tracks == null || tracks.isEmpty() ? IVideoCastController.CC_DISABLED
+                    : IVideoCastController.CC_ENABLED;
+        }
+        mCastController.updateClosedCaption(state);
+    }
+
     private void stopTrickplayTimer() {
         LOGD(TAG, "Stopped TrickPlay Timer");
         if (null != mSeekbarTimer) {
@@ -331,7 +366,7 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
                 authService = mCastManager.getMediaAuthService();
                 if (null != authService) {
                     mCastController.setLine2(null != authService.getPendingMessage()
-                        ? authService.getPendingMessage() : "");
+                            ? authService.getPendingMessage() : "");
                     mCastController.showLoading(true);
                 }
                 break;
@@ -344,13 +379,13 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
     }
 
     private void updateMetadata() {
-        String imageUrl = null;
+        Uri imageUrl = null;
         if (null == mSelectedMedia) {
             if (null != mMediaAuthService) {
-                imageUrl = Utils.getImageUrl(mMediaAuthService.getMediaInfo(), 1);
+                imageUrl = Utils.getImageUri(mMediaAuthService.getMediaInfo(), 1);
             }
         } else {
-            imageUrl = Utils.getImageUrl(mSelectedMedia, 1);
+            imageUrl = Utils.getImageUri(mSelectedMedia, 1);
         }
         showImage(imageUrl);
         if (null == mSelectedMedia) {
@@ -358,7 +393,7 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
         }
         MediaMetadata mm = mSelectedMedia.getMetadata();
         mCastController.setLine1(null != mm.getString(MediaMetadata.KEY_TITLE)
-            ? mm.getString(MediaMetadata.KEY_TITLE) : "");
+                ? mm.getString(MediaMetadata.KEY_TITLE) : "");
         boolean isLive = mSelectedMedia.getStreamType() == MediaInfo.STREAM_TYPE_LIVE;
         mCastController.adjustControllersForLiveStream(isLive);
     }
@@ -378,21 +413,21 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
         }
         switch (mediaStatus) {
             case MediaStatus.PLAYER_STATE_PLAYING:
-            	mIsFresh = false;
+                mIsFresh = false;
                 if (mPlaybackState != MediaStatus.PLAYER_STATE_PLAYING) {
                     mPlaybackState = MediaStatus.PLAYER_STATE_PLAYING;
                     mCastController.setPlaybackStatus(mPlaybackState);
                 }
                 break;
             case MediaStatus.PLAYER_STATE_PAUSED:
-            	mIsFresh = false;
+                mIsFresh = false;
                 if (mPlaybackState != MediaStatus.PLAYER_STATE_PAUSED) {
                     mPlaybackState = MediaStatus.PLAYER_STATE_PAUSED;
                     mCastController.setPlaybackStatus(mPlaybackState);
                 }
                 break;
             case MediaStatus.PLAYER_STATE_BUFFERING:
-            	mIsFresh = false;
+                mIsFresh = false;
                 if (mPlaybackState != MediaStatus.PLAYER_STATE_BUFFERING) {
                     mPlaybackState = MediaStatus.PLAYER_STATE_BUFFERING;
                     mCastController.setPlaybackStatus(mPlaybackState);
@@ -438,23 +473,54 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
 
     @Override
     public void onResume() {
+        super.onResume();
         LOGD(TAG, "onResume() was called");
         try {
-            mCastManager = VideoCastManager.getInstance(getActivity());
-            boolean shouldFinish = !mCastManager.isConnected()
-                    || (mCastManager.getPlaybackStatus() == MediaStatus.PLAYER_STATE_IDLE
-                    && mCastManager.getIdleReason() == MediaStatus.IDLE_REASON_FINISHED
-                    && !mIsFresh);
-            if (shouldFinish) {
-                mCastController.closeActivity();
+            mCastManager = VideoCastManager.getInstance();
+            try {
+                if (mCastManager.isRemoteMoviePaused() || mCastManager.isRemoteMoviePlaying()) {
+                    if (mCastManager.getRemoteMediaInformation() != null &&
+                            mSelectedMedia.getContentId()
+                                    .equals(mCastManager.getRemoteMediaInformation()
+                                            .getContentId())) {
+                        mIsFresh = false;
+                    }
+                }
+            } catch (TransientNetworkDisconnectionException e) {
+                LOGE(TAG, "Failed getting status of media playback", e);
+            } catch (NoConnectionException e) {
+                LOGE(TAG, "Failed getting status of media playback", e);
+            }
+            boolean shouldFinish = false;
+            if (!mCastManager.isConnecting()) {
+                shouldFinish = !(mCastManager.isConnected())
+                        || (mCastManager.getPlaybackStatus() == MediaStatus.PLAYER_STATE_IDLE
+                        && mCastManager.getIdleReason() == MediaStatus.IDLE_REASON_FINISHED);
+                if (shouldFinish && !mIsFresh) {
+                    mCastController.closeActivity();
+                    return;
+                }
             }
             mCastManager.addVideoCastConsumer(mCastConsumer);
             mCastManager.incrementUiCounter();
-            if (!mIsFresh) updatePlayerStatus();
+            if (!mIsFresh) {
+                updatePlayerStatus();
+                // updating metadata in case someone else has changed it and we are resuming the
+                // activity
+                try {
+                    mSelectedMedia = mCastManager.getRemoteMediaInformation();
+                    updateClosedCaptionState();
+                    updateMetadata();
+                } catch (TransientNetworkDisconnectionException e) {
+                    LOGE(TAG, "Failed to update the metadata due to network issues", e);
+                } catch (NoConnectionException e) {
+                    LOGE(TAG, "Failed to update the metadata due to network issues", e);
+                }
+            }
+
         } catch (CastException e) {
             // logged already
         }
-        super.onResume();
     }
 
     @Override
@@ -467,9 +533,6 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
 
     /**
      * Call this static method to create an instance of this fragment.
-     *
-     * @param extras
-     * @return
      */
     public static VideoCastControllerFragment newInstance(Bundle extras) {
         VideoCastControllerFragment f = new VideoCastControllerFragment();
@@ -483,8 +546,8 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
      * Gets the image at the given url and populates the image view with that. It tries to cache the
      * image to avoid unnecessary network calls.
      */
-    private void showImage(final String url) {
-        if (null != mImageAsyncTask) {
+    private void showImage(final Uri url) {
+        if (mImageAsyncTask != null) {
             mImageAsyncTask.cancel(true);
         }
         if (null == url) {
@@ -498,20 +561,7 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
             return;
         }
         mUrlAndBitmap = null;
-        mImageAsyncTask = new AsyncTask<String, Void, Bitmap>() {
-
-            @Override
-            protected Bitmap doInBackground(String... params) {
-                String uri = params[0];
-                try {
-                    URL imgUrl = new URL(uri);
-                    return BitmapFactory.decodeStream(imgUrl.openStream());
-                } catch (Exception e) {
-                    LOGE(TAG, "Failed to load the image with mUrl: " + uri, e);
-                }
-                return null;
-            }
-
+        mImageAsyncTask = new FetchBitmapTask() {
             @Override
             protected void onPostExecute(Bitmap bitmap) {
                 if (null != bitmap) {
@@ -520,10 +570,12 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
                     mUrlAndBitmap.mUrl = url;
                     mCastController.setImage(bitmap);
                 }
+                if (this == mImageAsyncTask) {
+                    mImageAsyncTask = null;
+                }
             }
         };
-
-        mImageAsyncTask.execute(url);
+        mImageAsyncTask.start(url);
     }
 
     /*
@@ -573,6 +625,14 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
      */
     private void showErrorDialog(String message) {
         ErrorDialogFragment.newInstance(message).show(getFragmentManager(), "dlg");
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (mImageAsyncTask != null) {
+            mImageAsyncTask.cancel(true);
+        }
     }
 
     // ------- Implementation of OnVideoCastControllerListener interface ----------------- //
@@ -643,7 +703,7 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
         updateOverallState();
         if (null == mSelectedMedia) {
             if (null != mMediaAuthService) {
-                showImage(Utils.getImageUrl(mMediaAuthService.getMediaInfo(), 1));
+                showImage(Utils.getImageUri(mMediaAuthService.getMediaInfo(), 1));
             }
         } else {
             updateMetadata();
@@ -668,6 +728,7 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
 
                 @Override
                 public void run() {
+                    updateClosedCaptionState();
                     mOverallState = OverallState.PLAYBACK;
                     onReady(info, true, startPoint, customData);
                 }
@@ -703,6 +764,24 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
 
     }
 
+    @Override
+    public void onTracksSelected(List<MediaTrack> tracks) {
+        long[] tracksArray;
+        if (tracks.size() == 0) {
+            tracksArray = new long[]{};
+        } else {
+            tracksArray = new long[tracks.size()];
+            for (int i = 0; i < tracks.size(); i++) {
+                tracksArray[i] = tracks.get(i).getId();
+            }
+        }
+        mCastManager.setActiveTrackIds(tracksArray);
+        if (tracks.size() > 0) {
+            mCastManager.setTextTrackStyle(mCastManager.getTracksPreferenceManager()
+                    .getTextTrackStyle());
+        }
+    }
+
     // ----------- Some utility methods --------------------------------------------------------- //
 
     /*
@@ -711,9 +790,9 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
     private class UrlAndBitmap {
 
         private Bitmap mBitmap;
-        private String mUrl;
+        private Uri mUrl;
 
-        private boolean isMatch(String url) {
+        private boolean isMatch(Uri url) {
             return null != url && null != mBitmap && url.equals(mUrl);
         }
     }
@@ -747,6 +826,7 @@ public class VideoCastControllerFragment extends Fragment implements OnVideoCast
         }
 
         mCastManager.clearContext(getActivity());
+        mCastManager.removeTracksSelectedListener(this);
     }
 
 }

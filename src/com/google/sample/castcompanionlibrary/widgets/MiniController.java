@@ -16,7 +16,15 @@
 
 package com.google.sample.castcompanionlibrary.widgets;
 
-import static com.google.sample.castcompanionlibrary.utils.LogUtils.LOGE;
+import com.google.android.gms.cast.MediaInfo;
+import com.google.android.gms.cast.MediaStatus;
+import com.google.sample.castcompanionlibrary.R;
+import com.google.sample.castcompanionlibrary.cast.VideoCastManager;
+import com.google.sample.castcompanionlibrary.cast.exceptions.CastException;
+import com.google.sample.castcompanionlibrary.cast.exceptions.NoConnectionException;
+import com.google.sample.castcompanionlibrary.cast.exceptions.OnFailedListener;
+import com.google.sample.castcompanionlibrary.cast.exceptions.TransientNetworkDisconnectionException;
+import com.google.sample.castcompanionlibrary.utils.FetchBitmapTask;
 
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -30,17 +38,6 @@ import android.widget.ImageView;
 import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
-
-import com.google.android.gms.cast.MediaInfo;
-import com.google.android.gms.cast.MediaStatus;
-import com.google.sample.castcompanionlibrary.R;
-import com.google.sample.castcompanionlibrary.cast.VideoCastManager;
-import com.google.sample.castcompanionlibrary.cast.exceptions.CastException;
-import com.google.sample.castcompanionlibrary.cast.exceptions.NoConnectionException;
-import com.google.sample.castcompanionlibrary.cast.exceptions.OnFailedListener;
-import com.google.sample.castcompanionlibrary.cast.exceptions.TransientNetworkDisconnectionException;
-
-import java.net.URL;
 
 /**
  * A compound component that provides a superset of functionalities required for the global access
@@ -76,6 +73,7 @@ public class MiniController extends RelativeLayout implements IMiniController {
     private View mContainer;
     private int mStreamType = MediaInfo.STREAM_TYPE_BUFFERED;
     private Drawable mStopDrawable;
+    private FetchBitmapTask mFetchBitmapTask;
 
     /**
      * @param context
@@ -129,14 +127,17 @@ public class MiniController extends RelativeLayout implements IMiniController {
             @Override
             public void onClick(View v) {
                 if (null != mListener) {
-                    setLoadingVisibility(true);
                     try {
+                        adjustControlsVisibility(false);
                         mListener.onPlayPauseClicked(v);
                     } catch (CastException e) {
+                        adjustControlsVisibility(true);
                         mListener.onFailed(R.string.failed_perform_action, -1);
                     } catch (TransientNetworkDisconnectionException e) {
+                        adjustControlsVisibility(true);
                         mListener.onFailed(R.string.failed_no_connection_trans, -1);
                     } catch (NoConnectionException e) {
+                        adjustControlsVisibility(true);
                         mListener.onFailed(R.string.failed_no_connection, -1);
                     }
                 }
@@ -183,29 +184,33 @@ public class MiniController extends RelativeLayout implements IMiniController {
         }
 
         mIconUri = uri;
-        new Thread(new Runnable() {
-            Bitmap bm = null;
-
+        if (mFetchBitmapTask != null) {
+            mFetchBitmapTask.cancel(true);
+        }
+        mFetchBitmapTask = new FetchBitmapTask() {
             @Override
-            public void run() {
-                try {
-                    URL imgUrl = new URL(mIconUri.toString());
-                    bm = BitmapFactory.decodeStream(imgUrl.openStream());
-                } catch (Exception e) {
-                    LOGE(TAG, "setIcon(): Failed to load the image with url: " +
-                            mIconUri + ", using the default one", e);
-                    bm = BitmapFactory.decodeResource(getResources(), R.drawable.dummy_album_art);
+            protected void onPostExecute(Bitmap bitmap) {
+                if (bitmap == null) {
+                    bitmap = BitmapFactory.decodeResource(getResources(),
+                            R.drawable.dummy_album_art);
                 }
-                mIcon.post(new Runnable() {
-
-                    @Override
-                    public void run() {
-                        setIcon(bm);
-                    }
-                });
-
+                setIcon(bitmap);
+                if (this == mFetchBitmapTask) {
+                    mFetchBitmapTask = null;
+                }
             }
-        }).start();
+        };
+
+        mFetchBitmapTask.start(uri);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        if (mFetchBitmapTask != null) {
+            mFetchBitmapTask.cancel(true);
+            mFetchBitmapTask = null;
+        }
     }
 
     @Override
@@ -222,14 +227,12 @@ public class MiniController extends RelativeLayout implements IMiniController {
     public void setPlaybackStatus(int state, int idleReason) {
         switch (state) {
             case MediaStatus.PLAYER_STATE_PLAYING:
-                mPlayPause.setVisibility(View.VISIBLE);
                 mPlayPause.setImageDrawable(getPauseStopButton());
-                setLoadingVisibility(false);
+                adjustControlsVisibility(true);
                 break;
             case MediaStatus.PLAYER_STATE_PAUSED:
-                mPlayPause.setVisibility(View.VISIBLE);
                 mPlayPause.setImageDrawable(mPlayDrawable);
-                setLoadingVisibility(false);
+                adjustControlsVisibility(true);
                 break;
             case MediaStatus.PLAYER_STATE_IDLE:
                 switch (mStreamType) {
@@ -239,9 +242,8 @@ public class MiniController extends RelativeLayout implements IMiniController {
                         break;
                     case MediaInfo.STREAM_TYPE_LIVE:
                         if (idleReason == MediaStatus.IDLE_REASON_CANCELED) {
-                            mPlayPause.setVisibility(View.VISIBLE);
                             mPlayPause.setImageDrawable(mPlayDrawable);
-                            setLoadingVisibility(false);
+                            adjustControlsVisibility(true);
                         } else {
                             mPlayPause.setVisibility(View.INVISIBLE);
                             setLoadingVisibility(false);
@@ -250,8 +252,7 @@ public class MiniController extends RelativeLayout implements IMiniController {
                 }
                 break;
             case MediaStatus.PLAYER_STATE_BUFFERING:
-                mPlayPause.setVisibility(View.INVISIBLE);
-                setLoadingVisibility(true);
+                adjustControlsVisibility(false);
                 break;
             default:
                 mPlayPause.setVisibility(View.INVISIBLE);
@@ -276,6 +277,12 @@ public class MiniController extends RelativeLayout implements IMiniController {
 
     private void setLoadingVisibility(boolean show) {
         mLoading.setVisibility(show ? View.VISIBLE : View.GONE);
+    }
+
+    private void adjustControlsVisibility(boolean showPlayPause) {
+        int visible = showPlayPause ? View.VISIBLE : View.INVISIBLE;
+        mPlayPause.setVisibility(visible);
+        setLoadingVisibility(!showPlayPause);
     }
 
     private Drawable getPauseStopButton() {
