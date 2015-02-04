@@ -145,8 +145,9 @@ public class VideoCastManager extends BaseCastManager
         DEVICE;
     }
 
+    protected static VideoCastManager sInstance;
+
     private static final String TAG = LogUtils.makeLogTag(VideoCastManager.class);
-    private static VideoCastManager sInstance;
     private final Class<?> mTargetActivity;
     private final Set<IMiniController> mMiniControllers;
     private final AudioManager mAudioManager;
