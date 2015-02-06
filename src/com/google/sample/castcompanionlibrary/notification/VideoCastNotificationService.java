@@ -388,7 +388,7 @@ public class VideoCastNotificationService extends Service {
                 .addAction(isPlaying ? R.drawable.notification_pause :
                                 R.drawable.notification_play,
                         getString(R.string.pause), playbackPendingIntent)
-                .addAction(R.drawable.notification_stop, getString(R.string.disconnect),
+                .addAction(R.drawable.notification_clear, getString(R.string.disconnect),
                         stopPendingIntent)
                 .setStyle(new Notification.MediaStyle()
                                 .setShowActionsInCompactView(new int[]{0,1}))

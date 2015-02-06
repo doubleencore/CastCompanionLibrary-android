@@ -21,7 +21,7 @@
         android:layout_alignParentRight="true"
         android:layout_centerVertical="true"
         android:layout_marginRight="5dp"
-        android:src="@drawable/notification_stop"/>
+        android:src="@drawable/notification_clear"/>
 
     <ImageView
         android:id="@+id/playPauseView"

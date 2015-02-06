@@ -19,7 +19,7 @@
         android:layout_alignParentRight="true"
         android:layout_centerVertical="true"
         android:layout_marginRight="5dp"
-        android:src="@drawable/ic_av_close_sm_dark"/>
+        android:src="@drawable/notification_clear"/>
 
     <ImageView
         android:id="@+id/playPauseView"
