@@ -16,8 +16,26 @@
 
 package com.google.android.libraries.cast.companionlibrary.cast;
 
-import static com.google.android.libraries.cast.companionlibrary.utils.LogUtils.LOGD;
-import static com.google.android.libraries.cast.companionlibrary.utils.LogUtils.LOGE;
+import android.annotation.TargetApi;
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.media.RemoteControlClient;
+import android.os.AsyncTask;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
+import android.os.SystemClock;
+import android.support.v4.view.MenuItemCompat;
+import android.support.v7.app.MediaRouteActionProvider;
+import android.support.v7.app.MediaRouteButton;
+import android.support.v7.app.MediaRouteDialogFactory;
+import android.support.v7.media.MediaRouteSelector;
+import android.support.v7.media.MediaRouter;
+import android.support.v7.media.MediaRouter.RouteInfo;
+import android.view.Menu;
+import android.view.MenuItem;
 
 import com.google.android.gms.cast.ApplicationMetadata;
 import com.google.android.gms.cast.Cast;
@@ -41,31 +59,13 @@ import com.google.android.libraries.cast.companionlibrary.utils.LogUtils;
 import com.google.android.libraries.cast.companionlibrary.utils.PreferenceAccessor;
 import com.google.android.libraries.cast.companionlibrary.utils.Utils;
 
-import android.annotation.TargetApi;
-import android.app.Activity;
-import android.content.Context;
-import android.content.Intent;
-import android.media.RemoteControlClient;
-import android.os.AsyncTask;
-import android.os.Build;
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.Message;
-import android.os.SystemClock;
-import android.support.v4.view.MenuItemCompat;
-import android.support.v7.app.MediaRouteActionProvider;
-import android.support.v7.app.MediaRouteButton;
-import android.support.v7.app.MediaRouteDialogFactory;
-import android.support.v7.media.MediaRouteSelector;
-import android.support.v7.media.MediaRouter;
-import android.support.v7.media.MediaRouter.RouteInfo;
-import android.view.Menu;
-import android.view.MenuItem;
-
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
+
+import static com.google.android.libraries.cast.companionlibrary.utils.LogUtils.LOGD;
+import static com.google.android.libraries.cast.companionlibrary.utils.LogUtils.LOGE;
 
 /**
  * An abstract class that manages connectivity to a cast device. Subclasses are expected to extend
@@ -234,7 +234,7 @@ public abstract class BaseCastManager
      * @param setDefaultRoute If {@code true}, after disconnection, the selected route will be set
      * to the Default Route.
      */
-    public final void disconnectDevice(boolean stopAppOnExit, boolean clearPersistedConnectionData,
+    public void disconnectDevice(boolean stopAppOnExit, boolean clearPersistedConnectionData,
             boolean setDefaultRoute) {
         LOGD(TAG, "disconnectDevice(" + clearPersistedConnectionData + "," + setDefaultRoute + ")");
         if (mSelectedCastDevice == null) {
